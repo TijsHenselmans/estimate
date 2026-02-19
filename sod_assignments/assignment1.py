@@ -14,7 +14,12 @@
 ### IMPORT STATEMEMTS
 
 import sys
-sys.path.append("../")
+from pathlib import Path
+
+ASSIGNMENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = ASSIGNMENT_DIR.parent
+
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Load standard modules
 import cartopy.crs as ccrs
@@ -41,12 +46,12 @@ from tudatpy.dynamics import environment
 ### EXTRACTING DATA 
 
 # Extract data
-extract_tar("./metadata.tar.xz")
-extract_tar("./data.tar.xz")
+extract_tar(str(ASSIGNMENT_DIR / "metadata.tar.xz"))
+extract_tar(str(ASSIGNMENT_DIR / "data.tar.xz"))
 
 # Define import folders
-metadata_folder = 'metadata/'
-data_folder = 'data/'
+metadata_folder = str(ASSIGNMENT_DIR / "metadata") + "/"
+data_folder = str(ASSIGNMENT_DIR / "data") + "/"
 
 
 ### DEFINE INITIAL STATE FROM TLE  
@@ -78,7 +83,7 @@ mid_epoch = (initial_epoch + final_epoch) / 2.0
 # Retrieve the spacecraft's initial state at mid-epoch from the TLE ephemeris
 delfi_ephemeris = environment.TleEphemeris("Earth", "J2000", delfi_tle, False)
 initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
-
+# Mid epoch was used initially but that did not make sense. 
 
 
 ###############################################################
@@ -115,8 +120,8 @@ accelerations = dict(
         'point_mass_gravity': True
     },
     Earth={
-        'point_mass_gravity': False,
-        'spherical_harmonic_gravity': True,
+        'point_mass_gravity': True,
+        'spherical_harmonic_gravity': False,
         'drag': True
     },
     Venus={
@@ -193,7 +198,7 @@ ax.legend()
 ax.set_xlabel('x [km]')
 ax.set_ylabel('y [km]')
 ax.set_zlabel('z [km]')
-plt.show()
+
 
 ### PLOT ACCELERATIONS ON DELFI 
 fig = plt.figure()
@@ -207,7 +212,7 @@ ax.set_xlabel('Time [Days since first recording day]')
 ax.set_ylabel('Acceleration [m/s]')
 plt.yscale('log')
 plt.grid()
-plt.show()
+
 
 
 ### PLOT KEPLERIAN ELEMENTS OF DELFT'S ORBIT
@@ -264,9 +269,6 @@ ax.grid()
 
 fig.tight_layout()
 
-plt.show()
-
-
 
 ### PLOT DIFFERENCES BETWEEN PROPAGATED AND TLE ORBITS IN ORBITAL ELEMENTS 
 
@@ -321,8 +323,6 @@ ax.grid()
 
 fig.tight_layout()
 
-plt.show()
-
 
 ### PLOT DIFFERENCES BETWEEN PROPAGATED AND TLE POSITION IN RSW COORDINATES 
 
@@ -350,8 +350,6 @@ ax.set_ylabel('Cross-track diff [km]')
 ax.grid()
 
 fig.tight_layout()
-
-plt.show()
 
 
 
@@ -396,7 +394,6 @@ ax.scatter(location_groundstation_lon,location_groundstation_lat, color='red', m
 ax.plot(longitude_horizon,latitude_horizon,color ='red')
 ax.gridlines(draw_labels=True)
 plt.title('Ground track and visibility')
-plt.show()
 
 
 
@@ -459,8 +456,6 @@ ax.set_xlim(7.0, 10.5)
 ax.set_xlabel('Time [hours since start of day]')
 ax.set_ylabel('azimuth [deg]')
 plt.grid()
-plt.show()
-
 
 
 ### SIMULATE DOPPLER MEASUREMENTS
@@ -498,7 +493,6 @@ ax.plot((simulated_obs_times - start_recording_day)/3600, simulated_doppler, col
 ax.set_xlabel('Time [hours since start of day]')
 ax.set_ylabel('Doppler [m/s]')
 plt.grid()
-plt.show()
 
 
 # With simplified doppler formula, calculate received frequency
@@ -515,7 +509,6 @@ ax.plot((simulated_obs_times - start_recording_day)/3600, simulated_doppler, col
 ax.set_xlabel('Time [hours since start of day]')
 ax.set_ylabel('Radio frequency [Hz]')
 plt.grid()
-plt.show()
 
 
 ###############################################################
@@ -566,7 +559,6 @@ ax.legend()
 ax.set_xlabel('Time [hours since start of day]')
 ax.set_ylabel('Doppler [m/s]')
 plt.grid()
-plt.show()
 
 
 ###############################################################
@@ -649,3 +641,6 @@ ax4.set_ylabel('Residual [m/s]')
 
 
 plt.show()
+
+# question for teacher: why was mid_epoch used for the initial state
+# 
