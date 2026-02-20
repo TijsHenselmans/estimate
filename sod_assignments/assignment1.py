@@ -104,9 +104,10 @@ initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
 mass = 2.2
 ref_area = (4 * 0.3 * 0.1 + 2 * 0.1 * 0.1) / 4  # Average projection area of a 3U CubeSat
 srp_coef = 1.2
-drag_coef = 2*1.2
+drag_coef = 1.2
+srp_coef2 = 2.4
 bodies = define_environment(mass, ref_area, drag_coef, srp_coef, "Delfi")
-
+bodies_comparison = define_environment(mass, ref_area, drag_coef, srp_coef2, "Delfi")
 
 ### DEFINE ACCELERATIONS EXERTED ON DELFI 
 
@@ -135,6 +136,29 @@ accelerations = dict(
     }
 )
 
+accelerations2compare = dict(
+    Sun={
+        'point_mass_gravity': True,
+        'solar_radiation_pressure': True
+    },
+    Moon={
+        'point_mass_gravity': True
+    },
+    Earth={
+        'point_mass_gravity': False,
+        'spherical_harmonic_gravity': True,
+        'drag': True
+    },
+    Venus={
+        'point_mass_gravity': True
+    },
+    Mars={
+        'point_mass_gravity': True
+    },
+    Jupiter={
+        'point_mass_gravity': True
+    }
+)
 
 ### PROPAGATE DYNAMICS OF DELFI 
 
@@ -143,8 +167,13 @@ accelerations = dict(
 cartesian_states, keplerian_states, latitudes, longitudes, saved_accelerations = \
     propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "Delfi", True)
 
+cartesian_states2compare, keplerian_states2compare, latitudes2compare, longitudes2compare, saved_accelerations2compare = \
+    propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies_comparison, accelerations2compare, "Delfi", True)
+
 # Retrieve accelerations
 accelerations_to_save, accelerations_ids = retrieve_accelerations_to_save(accelerations, "Delfi")
+
+accelerations2compare_to_save, accelerations2compare_ids = retrieve_accelerations_to_save(accelerations2compare, "Delfi")  
 
 # Retrieve propagation epochs (in seconds since J2000)
 propagation_epochs = cartesian_states[:, 0]
@@ -154,11 +183,15 @@ tle_cartesian_states = np.array([
     delfi_ephemeris.cartesian_state(current_epoch) for current_epoch in propagation_epochs
 ])
 
-
 ### COMPUTE DIFFERENCE BETWEEN PROPAGATED ORBIT AND REFERENCE TLE EPHEMERIS
 
 rsw_difference_wrt_tle = np.zeros((len(propagation_epochs), 7))
 keplerian_difference_wrt_tle = np.zeros((len(propagation_epochs), 7))
+
+### COMPUTE DIFFERENCE BETWEEN TWO PROPAGATION MODELS (DEFAULT - COMPARE)
+
+rsw_difference_between_models = np.zeros((len(propagation_epochs), 7))
+keplerian_difference_between_models = np.zeros((len(propagation_epochs), 7))
 
 # Parse all epochs in propagated state history
 for i in range(len(propagation_epochs)): 
@@ -188,6 +221,26 @@ for i in range(len(propagation_epochs)):
 
     # Compute difference in orbital elements
     keplerian_difference_wrt_tle[i,1:7] = keplerian_states[i,1:7] - current_tle_keplerian
+
+    # Store epoch
+    rsw_difference_between_models[i, 0] = current_epoch
+    keplerian_difference_between_models[i, 0] = current_epoch
+
+    # Compute state and element differences between both propagated models (default - compare)
+    current_default_state = cartesian_states[i, 1:7]
+    current_compare_state = cartesian_states2compare[i, 1:7]
+    current_model_state_difference = current_default_state - current_compare_state
+
+    current_model_position_difference = current_model_state_difference[0:3]
+    current_model_velocity_difference = current_model_state_difference[3:6]
+
+    # Convert model state difference from inertial to RSW (RSW frame defined by default trajectory)
+    rotation_to_rsw_default = frame_conversion.inertial_to_rsw_rotation_matrix(current_default_state)
+    rsw_difference_between_models[i, 1:4] = rotation_to_rsw_default @ current_model_position_difference
+    rsw_difference_between_models[i, 4:7] = rotation_to_rsw_default @ current_model_velocity_difference
+
+    # Difference in Keplerian elements between both propagated models (default - compare)
+    keplerian_difference_between_models[i, 1:7] = keplerian_states[i, 1:7] - keplerian_states2compare[i, 1:7]
 
 
 ### PLOTTING
@@ -219,7 +272,7 @@ ax.set_ylabel('Acceleration [m/s]')
 plt.yscale('log')
 plt.grid()
 
-
+# Plot of the difference between turned on and off perturbations
 
 ### PLOT KEPLERIAN ELEMENTS OF DELFT'S ORBIT
 
@@ -271,6 +324,121 @@ ax = fig.add_subplot(236)
 ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, keplerian_states[:,6]/np.pi*180, linestyle='-.')
 ax.set_xlabel('Time [hours since start of TLE]')
 ax.set_ylabel('True anomaly [deg]')
+ax.grid()
+
+fig.tight_layout()
+
+
+### PLOT DIFFERENCES BETWEEN TWO PROPAGATION MODELS IN ORBITAL ELEMENTS
+
+comparison_time_hours = (keplerian_difference_between_models[:, 0] - keplerian_difference_between_models[0, 0]) / 3600.0
+comparison_time_end_hours = propagation_time / 3600.0
+
+fig = plt.figure(figsize=(12,6))
+
+# semi-major axis
+ax = fig.add_subplot(231)
+ax.plot(comparison_time_hours, (keplerian_difference_between_models[:,1])/1.0e3, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('Δ semi-major axis [km]')
+ax.grid()
+
+# eccentricity
+ax = fig.add_subplot(232)
+ax.set_title(f'Difference between default and compare orbital elements')
+ax.plot(comparison_time_hours, keplerian_difference_between_models[:,2], linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('Δ eccentricity [-]')
+ax.grid()
+
+# inclination
+ax = fig.add_subplot(233)
+ax.plot(comparison_time_hours, keplerian_difference_between_models[:,3]/np.pi*180, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('Δ inclination [deg]')
+ax.grid()
+
+# argument of periapsis
+ax = fig.add_subplot(234)
+ax.plot(comparison_time_hours, (keplerian_difference_between_models[:,4])/np.pi*180, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('Δ argument of perigee [deg]')
+ax.grid()
+
+# right ascension of the ascending node
+ax = fig.add_subplot(235)
+ax.plot(comparison_time_hours, keplerian_difference_between_models[:,5]/np.pi*180, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('Δ RAAN [deg]')
+ax.grid()
+
+# true anomaly
+ax = fig.add_subplot(236)
+ax.plot(comparison_time_hours, keplerian_difference_between_models[:,6]/np.pi*180, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('Δ true anomaly [deg]')
+ax.grid()
+
+fig.tight_layout()
+
+
+### PLOT DIFFERENCES BETWEEN TWO PROPAGATION MODELS IN RSW ELEMENTS
+
+fig = plt.figure(figsize=(12,6))
+
+# radial position
+ax = fig.add_subplot(231)
+ax.plot(comparison_time_hours, (rsw_difference_between_models[:,1])/1.0e3, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('ΔR [km]')
+ax.grid()
+
+# along-track position
+ax = fig.add_subplot(232)
+ax.set_title(f'Difference between default and compare in RSW')
+ax.plot(comparison_time_hours, (rsw_difference_between_models[:,2])/1.0e3, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('ΔS [km]')
+ax.grid()
+
+# cross-track position
+ax = fig.add_subplot(233)
+ax.plot(comparison_time_hours, (rsw_difference_between_models[:,3])/1.0e3, linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('ΔW [km]')
+ax.grid()
+
+# radial velocity
+ax = fig.add_subplot(234)
+ax.plot(comparison_time_hours, rsw_difference_between_models[:,4], linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('ΔV_R [m/s]')
+ax.grid()
+
+# along-track velocity
+ax = fig.add_subplot(235)
+ax.plot(comparison_time_hours, rsw_difference_between_models[:,5], linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('ΔV_S [m/s]')
+ax.grid()
+
+# cross-track velocity
+ax = fig.add_subplot(236)
+ax.plot(comparison_time_hours, rsw_difference_between_models[:,6], linestyle='-.')
+ax.set_xlim(0.0, comparison_time_end_hours)
+ax.set_xlabel('Time [hours since propagation start]')
+ax.set_ylabel('ΔV_W [m/s]')
 ax.grid()
 
 fig.tight_layout()

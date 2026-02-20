@@ -187,9 +187,6 @@ def create_integrator_settings(time_step: float = 10.0):
 
 def create_propagator_settings(initial_state, initial_time, final_time, bodies, acceleration_models, spacecraft_name,
                                save_accelerations=False, accelerations_to_save=[]):
-    # Define mid time
-    mid_time = (initial_time + final_time) / 2.0
-
     # Define bodies that are propagated
     bodies_to_propagate = [spacecraft_name]
 
@@ -217,7 +214,7 @@ def create_propagator_settings(initial_state, initial_time, final_time, bodies, 
     accelerations = create_accelerations(acceleration_models, bodies, spacecraft_name)
 
     return propagation_setup.propagator.translational(
-        central_bodies, accelerations, bodies_to_propagate, initial_state, mid_time, integrator_settings,
+        central_bodies, accelerations, bodies_to_propagate, initial_state, initial_time, integrator_settings,
         termination_condition, output_variables=dependent_variables)
 
 

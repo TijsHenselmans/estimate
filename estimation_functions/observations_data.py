@@ -369,19 +369,50 @@ def get_all_passes_times(real_passes_start_times, real_passes_end_times, simulat
 
 
 def interpolate_obs(simulated_obs, real_obs):
-    interpolation_function = interp1d(simulated_obs[:, 0], simulated_obs[:, 1], kind='cubic')
-    min_time_simulated = min(simulated_obs[:, 0])
-    max_time_simulated = max(simulated_obs[:, 0])
+    simulated_obs = np.asarray(simulated_obs)
+    real_obs = np.asarray(real_obs)
+
+    if simulated_obs.size == 0:
+        raise ValueError(
+            "Cannot interpolate observations: simulated_obs is empty for selected pass. "
+            "Choose another pass index or increase propagation/observation coverage."
+        )
+    if real_obs.size == 0:
+        raise ValueError(
+            "Cannot interpolate observations: real_obs is empty for selected pass."
+        )
+
+    min_time_simulated = np.min(simulated_obs[:, 0])
+    max_time_simulated = np.max(simulated_obs[:, 0])
 
     interpolated_real_obs = []
-
-    obs_times_comparison = []
     for i in range(len(real_obs[:, 0])):
         if min_time_simulated < real_obs[i, 0] < max_time_simulated:
-            obs_times_comparison.append(real_obs[i, 0])
             interpolated_real_obs.append([real_obs[i, 0], real_obs[i, 1]])
 
     interpolated_real_obs = np.array(interpolated_real_obs)
+
+    if interpolated_real_obs.size == 0:
+        raise ValueError(
+            "Cannot interpolate observations: no overlapping timestamps between selected real and simulated pass. "
+            "Choose another pass index or increase propagation/observation coverage."
+        )
+
+    simulation_times = simulated_obs[:, 0]
+    simulation_values = simulated_obs[:, 1]
+
+    unique_time_indices = np.unique(simulation_times, return_index=True)[1]
+    unique_time_indices = np.sort(unique_time_indices)
+    simulation_times = simulation_times[unique_time_indices]
+    simulation_values = simulation_values[unique_time_indices]
+
+    if simulation_times.size < 2:
+        raise ValueError(
+            "Cannot interpolate observations: fewer than 2 unique simulated timestamps in selected pass."
+        )
+
+    interpolation_kind = 'cubic' if simulation_times.size >= 4 else 'linear'
+    interpolation_function = interp1d(simulation_times, simulation_values, kind=interpolation_kind)
 
     interpolated_simulated_obs = np.zeros(np.shape(interpolated_real_obs))
     interpolated_simulated_obs[:, 0] = interpolated_real_obs[:, 0]
