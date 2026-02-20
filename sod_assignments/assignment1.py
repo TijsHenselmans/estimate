@@ -104,7 +104,7 @@ initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
 mass = 2.2
 ref_area = (4 * 0.3 * 0.1 + 2 * 0.1 * 0.1) / 4  # Average projection area of a 3U CubeSat
 srp_coef = 1.2
-drag_coef = 1.2
+drag_coef = 2*1.2
 bodies = define_environment(mass, ref_area, drag_coef, srp_coef, "Delfi")
 
 
@@ -120,8 +120,8 @@ accelerations = dict(
         'point_mass_gravity': True
     },
     Earth={
-        'point_mass_gravity': True,
-        'spherical_harmonic_gravity': False,
+        'point_mass_gravity': False,
+        'spherical_harmonic_gravity': True,
         'drag': True
     },
     Venus={
@@ -149,6 +149,11 @@ accelerations_to_save, accelerations_ids = retrieve_accelerations_to_save(accele
 # Retrieve propagation epochs (in seconds since J2000)
 propagation_epochs = cartesian_states[:, 0]
 
+# Retrieve reference TLE state history at propagated epochs
+tle_cartesian_states = np.array([
+    delfi_ephemeris.cartesian_state(current_epoch) for current_epoch in propagation_epochs
+])
+
 
 ### COMPUTE DIFFERENCE BETWEEN PROPAGATED ORBIT AND REFERENCE TLE EPHEMERIS
 
@@ -163,7 +168,7 @@ for i in range(len(propagation_epochs)):
     keplerian_difference_wrt_tle[i,0] = current_epoch
 
     # Retrieve current TLE and propagated states
-    current_tle_state = delfi_ephemeris.cartesian_state(current_epoch)
+    current_tle_state = tle_cartesian_states[i, :]
     current_propagated_state = cartesian_states[i,1:7]
 
     # Compute difference in the inertial frame
@@ -193,6 +198,7 @@ fig = plt.figure(figsize=(6, 6))
 ax = fig.add_subplot(111, projection='3d')
 ax.set_title(f'Delfi-C3 trajectory around Earth')
 ax.plot(cartesian_states[:, 1]/1.0e3, cartesian_states[:, 2]/1.0e3, cartesian_states[:, 3]/1.0e3, label='Delfi-C3', linestyle='-.')
+ax.plot(tle_cartesian_states[:, 0]/1.0e3, tle_cartesian_states[:, 1]/1.0e3, tle_cartesian_states[:, 2]/1.0e3, label='TLE ephemeris', color='red')
 ax.scatter(0.0, 0.0, 0.0, label="Earth", marker='o', color='blue')
 ax.legend()
 ax.set_xlabel('x [km]')
