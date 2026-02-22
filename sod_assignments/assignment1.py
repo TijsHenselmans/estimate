@@ -105,7 +105,7 @@ mass = 2.2
 ref_area = (4 * 0.3 * 0.1 + 2 * 0.1 * 0.1) / 4  # Average projection area of a 3U CubeSat
 srp_coef = 1.2
 drag_coef = 1.2
-srp_coef2 = 2.4
+srp_coef2 = 2*1.2
 bodies = define_environment(mass, ref_area, drag_coef, srp_coef, "Delfi")
 bodies_comparison = define_environment(mass, ref_area, drag_coef, srp_coef2, "Delfi")
 
@@ -139,7 +139,7 @@ accelerations = dict(
 accelerations2compare = dict(
     Sun={
         'point_mass_gravity': True,
-        'solar_radiation_pressure': True
+        'solar_radiation_pressure': False
     },
     Moon={
         'point_mass_gravity': True
@@ -243,6 +243,28 @@ for i in range(len(propagation_epochs)):
     keplerian_difference_between_models[i, 1:7] = keplerian_states[i, 1:7] - keplerian_states2compare[i, 1:7]
 
 
+def wrap_to_pi(angle_rad):
+    return np.arctan2(np.sin(angle_rad), np.cos(angle_rad))
+
+
+for angle_idx in [4, 5, 6]:
+    keplerian_difference_between_models[:, angle_idx] = np.unwrap(
+        wrap_to_pi(keplerian_difference_between_models[:, angle_idx])
+    )
+    keplerian_difference_wrt_tle[:, angle_idx] = np.unwrap(
+        wrap_to_pi(keplerian_difference_wrt_tle[:, angle_idx])
+    )
+
+true_anomaly_deg = np.rad2deg(np.unwrap(keplerian_states[:, 6]))
+delta_arg_perigee_between_models_deg = np.rad2deg(keplerian_difference_between_models[:, 4])
+delta_raan_between_models_deg = np.rad2deg(keplerian_difference_between_models[:, 5])
+delta_true_anomaly_between_models_deg = np.rad2deg(keplerian_difference_between_models[:, 6])
+
+delta_arg_perigee_wrt_tle_deg = np.rad2deg(keplerian_difference_wrt_tle[:, 4])
+delta_raan_wrt_tle_deg = np.rad2deg(keplerian_difference_wrt_tle[:, 5])
+delta_true_anomaly_wrt_tle_deg = np.rad2deg(keplerian_difference_wrt_tle[:, 6])
+
+
 ### PLOTTING
 
 ### PLOT PROPAGATED ORBIT 
@@ -321,7 +343,7 @@ ax.grid()
 
 # true anomaly
 ax = fig.add_subplot(236)
-ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, keplerian_states[:,6]/np.pi*180, linestyle='-.')
+ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, true_anomaly_deg, linestyle='-.')
 ax.set_xlabel('Time [hours since start of TLE]')
 ax.set_ylabel('True anomaly [deg]')
 ax.grid()
@@ -363,7 +385,7 @@ ax.grid()
 
 # argument of periapsis
 ax = fig.add_subplot(234)
-ax.plot(comparison_time_hours, (keplerian_difference_between_models[:,4])/np.pi*180, linestyle='-.')
+ax.plot(comparison_time_hours, delta_arg_perigee_between_models_deg, linestyle='-.')
 ax.set_xlim(0.0, comparison_time_end_hours)
 ax.set_xlabel('Time [hours since propagation start]')
 ax.set_ylabel('Δ argument of perigee [deg]')
@@ -371,7 +393,7 @@ ax.grid()
 
 # right ascension of the ascending node
 ax = fig.add_subplot(235)
-ax.plot(comparison_time_hours, keplerian_difference_between_models[:,5]/np.pi*180, linestyle='-.')
+ax.plot(comparison_time_hours, delta_raan_between_models_deg, linestyle='-.')
 ax.set_xlim(0.0, comparison_time_end_hours)
 ax.set_xlabel('Time [hours since propagation start]')
 ax.set_ylabel('Δ RAAN [deg]')
@@ -379,7 +401,7 @@ ax.grid()
 
 # true anomaly
 ax = fig.add_subplot(236)
-ax.plot(comparison_time_hours, keplerian_difference_between_models[:,6]/np.pi*180, linestyle='-.')
+ax.plot(comparison_time_hours, delta_true_anomaly_between_models_deg, linestyle='-.')
 ax.set_xlim(0.0, comparison_time_end_hours)
 ax.set_xlabel('Time [hours since propagation start]')
 ax.set_ylabel('Δ true anomaly [deg]')
@@ -476,21 +498,21 @@ ax.grid()
 
 # argument of periapsis
 ax = fig.add_subplot(234)
-ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, (keplerian_difference_wrt_tle[:,4])/np.pi*180, linestyle='-.')
+ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, delta_arg_perigee_wrt_tle_deg, linestyle='-.')
 ax.set_xlabel('Time [hours since start of TLE]')
 ax.set_ylabel('Argument of perigee [deg]')
 ax.grid()
 
 # right ascension of the ascending node
 ax = fig.add_subplot(235)
-ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, keplerian_difference_wrt_tle[:,5]/np.pi*180, linestyle='-.')
+ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, delta_raan_wrt_tle_deg, linestyle='-.')
 ax.set_xlabel('Time [hours since start of TLE]')
 ax.set_ylabel('RAAN [deg]')
 ax.grid()
 
 # true anomaly
 ax = fig.add_subplot(236)
-ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, keplerian_difference_wrt_tle[:,6]/np.pi*180, linestyle='-.')
+ax.plot((keplerian_states[:, 0] - start_recording_day)/3600, delta_true_anomaly_wrt_tle_deg, linestyle='-.')
 ax.set_xlabel('Time [hours since start of TLE]')
 ax.set_ylabel('True anomaly [deg]')
 ax.grid()
