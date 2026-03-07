@@ -92,37 +92,27 @@ data_folder = str(data_dir) + '/'
 
 
 # Files to be uploaded
-metadata = ['Delfi-C3_32789_202004011044.yml', 
-            'Delfi-C3_32789_202004011219.yml',
-            'Delfi-C3_32789_202004021953.yml', 
-            'Delfi-C3_32789_202004022126.yml',
-            'Delfi-C3_32789_202004031031.yml', 
-            'Delfi-C3_32789_202004031947.yml',
+metadata = ['Delfi-C3_32789_202004011044.yml', 'Delfi-C3_32789_202004011219.yml',
+            'Delfi-C3_32789_202004021953.yml', 'Delfi-C3_32789_202004022126.yml',
+            'Delfi-C3_32789_202004031031.yml', 'Delfi-C3_32789_202004031947.yml',
             'Delfi-C3_32789_202004041200.yml',
 
-            'Delfi-C3_32789_202004061012.yml', 
-            'Delfi-C3_32789_202004062101.yml',
-            'Delfi-C3_32789_202004072055.yml', 
-            'Delfi-C3_32789_202004072230.yml',
+            'Delfi-C3_32789_202004061012.yml', 'Delfi-C3_32789_202004062101.yml',
+            'Delfi-C3_32789_202004072055.yml', 'Delfi-C3_32789_202004072230.yml',
             'Delfi-C3_32789_202004081135.yml']
 
-data = ['Delfi-C3_32789_202004011044.csv', 
-        'Delfi-C3_32789_202004011219.csv',
-        'Delfi-C3_32789_202004021953.csv', 
-        'Delfi-C3_32789_202004022126.csv',
-        'Delfi-C3_32789_202004031031.csv', 
-        'Delfi-C3_32789_202004031947.csv',
+data = ['Delfi-C3_32789_202004011044.csv', 'Delfi-C3_32789_202004011219.csv',
+        'Delfi-C3_32789_202004021953.csv', 'Delfi-C3_32789_202004022126.csv',
+        'Delfi-C3_32789_202004031031.csv', 'Delfi-C3_32789_202004031947.csv',
         'Delfi-C3_32789_202004041200.csv',
 
-        'Delfi-C3_32789_202004061012.csv', 
-        'Delfi-C3_32789_202004062101.csv', 
-        'Delfi-C3_32789_202004072055.csv', 
-        'Delfi-C3_32789_202004072230.csv',
+        'Delfi-C3_32789_202004061012.csv', 'Delfi-C3_32789_202004062101.csv', 
+        'Delfi-C3_32789_202004072055.csv', 'Delfi-C3_32789_202004072230.csv',
         'Delfi-C3_32789_202004081135.csv']
         
 # Specify which metadata and data files should be loaded (this will change throughout the assignment)
 # indices_files_to_load = [0, 1]
-indices_files_to_load = [0,1,2,3,4,5,6,7,8,9,10,11]
+indices_files_to_load = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]
 
 
 ### SETTING UP AN INITIAL ORBIT DETERMINATION
@@ -141,9 +131,10 @@ initial_epoch, initial_state_teme, b_star = get_tle_initial_conditions(metadata_
 # Define the propagation time, and compute the final and mid-propagation epochs accordingly.
 propagation_time = 10.0 * constants.JULIAN_DAY
 final_epoch = get_start_next_day(initial_epoch) + propagation_time
+mid_epoch = (initial_epoch + final_epoch) / 2.0
 
-# Retrieve the spacecraft's initial state at the propagation start epoch from the TLE orbit
-initial_state = propagate_sgp4(metadata_folder + metadata[0], initial_epoch, [initial_epoch], old_yml=False)[0, 1:]
+# Retrieve the spacecraft's initial state at mid-epoch from the TLE orbit
+initial_state = propagate_sgp4(metadata_folder + metadata[0], initial_epoch, [mid_epoch], old_yml=False)[0, 1:]
 
 # Retrieve recording starting times
 recording_start_times = extract_recording_start_times_yml(metadata_folder, [metadata[i] for i in indices_files_to_load], old_yml=False)
@@ -161,20 +152,9 @@ passes_start_times, passes_end_times, observation_times, observations_set = load
 
 # Define tracking arcs and retrieve the corresponding arc starting times (this will change throughout the assignment)
 # Four options: one arc per pass ('per_pass'), one arc per day ('per_day'), one arc every 3 days ('per_3_days') and one arc per week ('per_week')
-arc_definition = 'per_pass'
-bias_definition = 'per_pass'
-estimate_linear_bias = True
-propagation_epoch_mode = 'arc_mid'
-initial_state_epoch_mode = 'arc_mid'  # 'arc_start' or 'arc_mid'
-enable_auto_retry = True
-
-arc_start_times, arc_mid_times, arc_end_times = define_arcs(arc_definition, passes_start_times, passes_end_times)
+arc_start_times, arc_mid_times, arc_end_times = define_arcs('per_day', passes_start_times, passes_end_times)
 print('arc_start_times', arc_start_times)
 print('arc_end_times', arc_end_times)
-
-# Choose which epochs are used to seed arc-wise initial states.
-# Set mode to 'arc_start' or 'arc_mid'.
-initial_state_epochs = arc_mid_times if initial_state_epoch_mode == 'arc_mid' else arc_start_times
 
 ### SETTING THE ESTIMATION SETTINGS 
 
@@ -199,8 +179,8 @@ accelerations = dict(
         'point_mass_gravity': True
     },
     Earth={
-        'point_mass_gravity': True,
-        'spherical_harmonic_gravity': False,
+        'point_mass_gravity': False,
+        'spherical_harmonic_gravity': True,
         'drag': True
     },
     Venus={
@@ -216,7 +196,7 @@ accelerations = dict(
 
 # Propagate dynamics and retrieve Delfi's initial state at the start of each arc
 orbit = propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "Delfi")
-arc_wise_initial_states = get_initial_states(bodies, initial_state_epochs, "Delfi")
+arc_wise_initial_states = get_initial_states(bodies, arc_mid_times, "Delfi")
 
 
 # Redefine environment to allow for multi-arc dynamics propagation_functions
@@ -224,20 +204,21 @@ bodies = define_environment(mass, ref_area, drag_coef, srp_coef, "Delfi", multi_
 
 # Define multi-arc propagator settings
 multi_arc_propagator_settings = define_multi_arc_propagation_settings(arc_wise_initial_states, arc_start_times, arc_end_times,
-                                                                      bodies, accelerations, "Delfi", propagation_epoch_mode)
+                                                                      bodies, accelerations, "Delfi")
 # Create the DopTrack station
 define_doptrack_station(bodies)
 
 # Define default observation settings
 # Specify on which time interval the observation bias(es) should be defined. This will change throughout the assignment (can be 'per_pass', 'per_arc', 'global')
 # Noting that the arc duration can vary (see arc definition)
+bias_definition = 'per_pass'
 Doppler_models = dict(
     constant_absolute_bias={
         'activated': True,
         'time_interval': bias_definition
     },
     linear_absolute_bias={
-        'activated': estimate_linear_bias,
+        'activated': True,
         'time_interval': bias_definition
     }
 )
@@ -252,14 +233,11 @@ parameters_list = dict(
         'estimate': True
     },
     linear_absolute_bias={
-        'estimate': estimate_linear_bias
+        'estimate': True
     }
 )
 parameters_to_estimate = define_parameters(parameters_list, bodies, multi_arc_propagator_settings, "Delfi",
-                                           arc_start_times, arc_mid_times,
-                                           [(get_link_ends_id("DopTrackStation", "Delfi"), passes_start_times)],
-                                           Doppler_models,
-                                           initial_state_epoch_mode)
+                                           arc_start_times, arc_mid_times, [(get_link_ends_id("DopTrackStation", "Delfi"), passes_start_times)], Doppler_models)
 parameters.print_parameter_names(parameters_to_estimate)
 
 # Create the estimator object
@@ -281,33 +259,7 @@ nb_parameters = len(truth_parameters)
 # Perform estimation_functions
 nb_iterations = 10
 nb_arcs = len(arc_start_times)
-
-# Estimation tuning knobs (useful when sweeping arc length, bias models and selected passes)
-apriori_position_sigma = 50  # [m]
-apriori_velocity_sigma = 0.1 # [m/s]
-apriori_other_sigma = 5.0      # [m/s] for Doppler biases
-doppler_noise_sigma = 5.0        # [m/s]
-
-print(
-    f"Running POD with arc_definition={arc_definition}, bias_definition={bias_definition}, "
-    f"estimate_linear_bias={estimate_linear_bias}, "
-    f"epoch_modes=(propagation={propagation_epoch_mode}, state={initial_state_epoch_mode}), "
-    f"sigmas=({apriori_position_sigma}, {apriori_velocity_sigma}, "
-    f"{apriori_other_sigma}), noise_sigma={doppler_noise_sigma}"
-)
-
-pod_output = run_estimation(
-    estimator,
-    parameters_to_estimate,
-    observations_set,
-    nb_arcs,
-    nb_iterations,
-    apriori_covariance_position=apriori_position_sigma,
-    apriori_covariance_velocity=apriori_velocity_sigma,
-    apriori_covariance_other_parameters=apriori_other_sigma,
-    noise_level=doppler_noise_sigma,
-    enable_auto_retry=enable_auto_retry,
-)
+pod_output = run_estimation(estimator, parameters_to_estimate, observations_set, nb_arcs, nb_iterations)
 
 errors = pod_output.formal_errors
 residuals = pod_output.residual_history
@@ -338,7 +290,7 @@ for i in range(len(passes_start_times)):
     axs[i//3,i%3].set_title(f'Pass '+str(i+1))
     axs[i//3,i%3].grid()
 fig.tight_layout()
-
+plt.show()
 
 # Plot residuals histogram
 fig = plt.figure()
@@ -347,7 +299,7 @@ plt.hist(residuals[:,nb_iterations-1],100)
 ax.set_xlabel('Doppler residuals [m/s]')
 ax.set_ylabel('Nb occurrences []')
 plt.grid()
-
+plt.show()
 
 
 ### ORBIT VALIDATION: some comparison suggestions
@@ -399,7 +351,7 @@ print('BIASES ESTIMATES')
 print('ABSOLUTE CONSTANT BIASES ESTIMATES')
 print(updated_parameters[6*nb_arcs:6*nb_arcs+number_of_passes])
 print('LINEAR CONSTANT BIASES ESTIMATES')
-print(updated_parameters[6*nb_arcs+number_of_passes:6*nb_arcs+number_of_passes*2])
+print(updated_parameters[6*nb_arcs+number_of_passes+1:6*nb_arcs+number_of_passes*2])
 
 
 # Comparing estimated vs TLE orbit. First redefine the dynamical environment (multi-arc ephemeris disabled) 
@@ -464,7 +416,7 @@ ax.set_ylabel('Diff VZ [km/s]')
 plt.grid()
 
 fig.tight_layout()
-
+plt.show()
 
 
 # Plot propagated (estimated and TLE) orbits
@@ -478,6 +430,7 @@ ax.legend()
 ax.set_xlabel('x [m]')
 ax.set_ylabel('y [m]')
 ax.set_zlabel('z [m]')
+plt.show()
 
 # Compute distance and velocity magnitude for both TLE and estimated orbits
 range_TLE = np.sqrt(TLE_orbit[:,1]**2+TLE_orbit[:,2]**2+TLE_orbit[:,3]**2)
@@ -502,7 +455,7 @@ ax.set_xlabel('Time [s]')
 ax.set_ylabel('Residuals Vmag [km/s]')
 plt.grid()
 fig.tight_layout()
-
+plt.show()
 
 
 # Compute distance between the TLE and estimated orbits
@@ -517,7 +470,7 @@ ax.set_xlabel('Time [s]')
 ax.set_ylabel('Distance between orbits [km]')
 ax.set_title(f'Pass '+str(arc_index+1))
 plt.grid()
-
+plt.show()
 
 
 # Compute difference in RSW and keplerian coordinates
@@ -597,7 +550,7 @@ ax.set_ylabel('Diff Vw [km/s]')
 plt.grid()
 
 fig.tight_layout()
-
+plt.show()
 
 
 # Plot differences between the TLE and estimated orbits in Keplerian elements

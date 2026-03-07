@@ -264,7 +264,7 @@ def get_initial_states(bodies, arc_start_times, spacecraft_name):
 
 
 def define_multi_arc_propagation_settings(arc_wise_initial_states, arc_start_times, arc_end_times, bodies,
-                                          acceleration_models, spacecraft_name):
+                                          acceleration_models, spacecraft_name, epoch_mode="arc_start"):
     bodies_to_propagate = [spacecraft_name]
     central_bodies = ["Earth"]
 
@@ -272,13 +272,24 @@ def define_multi_arc_propagation_settings(arc_wise_initial_states, arc_start_tim
     propagator_settings_list = []
     for i in range(nb_arcs):
         arc_initial_state = arc_wise_initial_states[i]
+        arc_start_time = arc_start_times[i]
         arc_mid_time = (arc_start_times[i] + arc_end_times[i]) / 2.0
 
         integrator_settings = create_integrator_settings()
 
-        arc_termination_condition = propagation_setup.propagator.non_sequential_termination(
-            propagation_setup.propagator.time_termination(arc_end_times[i]),
-            propagation_setup.propagator.time_termination(arc_start_times[i]))
+        if epoch_mode == "arc_start":
+            # Use forward-only propagation from arc start to arc end.
+            # This is numerically more robust during estimation updates than mid-arc bidirectional integration.
+            propagation_initial_time = arc_start_time
+            arc_termination_condition = propagation_setup.propagator.time_termination(arc_end_times[i])
+        elif epoch_mode == "arc_mid":
+            # Legacy workflow used in original assignment notebooks.
+            propagation_initial_time = arc_mid_time
+            arc_termination_condition = propagation_setup.propagator.non_sequential_termination(
+                propagation_setup.propagator.time_termination(arc_end_times[i]),
+                propagation_setup.propagator.time_termination(arc_start_times[i]))
+        else:
+            raise ValueError(f"Unknown epoch_mode='{epoch_mode}', expected 'arc_start' or 'arc_mid'.")
 
         dependent_variables = []
         dependent_variables.append(propagation_setup.dependent_variable.total_acceleration(spacecraft_name))
@@ -286,7 +297,7 @@ def define_multi_arc_propagation_settings(arc_wise_initial_states, arc_start_tim
         accelerations = create_accelerations(acceleration_models, bodies, spacecraft_name)
 
         propagator_settings_list.append(propagation_setup.propagator.translational(
-            central_bodies, accelerations, bodies_to_propagate, arc_initial_state, arc_mid_time, integrator_settings,
+            central_bodies, accelerations, bodies_to_propagate, arc_initial_state, propagation_initial_time, integrator_settings,
             arc_termination_condition,
             output_variables=dependent_variables))
 

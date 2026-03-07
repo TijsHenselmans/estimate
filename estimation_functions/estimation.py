@@ -237,17 +237,17 @@ def define_observation_settings(spacecraft_name, Doppler_models={}, passes_start
                 biases_values.append(np.zeros(1))
 
             if time_interval == 'per_pass' or time_interval == 'per_arc':
-                arc_wise_time_bias = biases.arc_wise_time_drift_bias(biases_values, arc_wise_times, links.receiver, arc_wise_times)
+                arc_wise_time_bias = biases.arc_wise_time_bias(biases_values, arc_wise_times, links.receiver)
                 combined_biases.append(arc_wise_time_bias)
             else:
-                time_bias = biases.time_drift_bias(biases_values, links.receiver, passes_start_times[0])
+                time_bias = biases.time_bias(np.zeros(1), links.receiver)
                 combined_biases.append(time_bias)
 
     # Define all biases
     obs_biases = biases.combined_bias(combined_biases)
 
     # Create observation settings for each link/observable
-    observation_settings = [model_settings.one_way_open_loop_doppler(get_link_ends("DopTrackStation", spacecraft_name), bias_settings=obs_biases)]
+    observation_settings = [model_settings.one_way_doppler_instantaneous(get_link_ends("DopTrackStation", spacecraft_name), bias_settings=obs_biases)]
 
     return observation_settings
 
@@ -360,14 +360,24 @@ def define_biases(Doppler_models={}, passes_start_times=[], arc_start_times=[]):
     return biases.combined_bias(combined_biases)
 
 
-def define_parameters(parameters_list, bodies, propagator_settings, spacecraft_name, arc_start_times, arc_mid_times, pass_times_per_linkend=[], obs_models={}):
+def define_parameters(parameters_list, bodies, propagator_settings, spacecraft_name, arc_start_times, arc_mid_times,
+                      pass_times_per_linkend=[], obs_models={}, initial_state_epoch_mode="arc_start"):
 
     parameter_settings = []
 
     # Initial states
     if "initial_state" in parameters_list:
         if parameters_list.get('initial_state').get('estimate'):
-            initial_states_settings = parameters_setup.initial_states(propagator_settings, bodies, arc_mid_times)
+            if initial_state_epoch_mode == "arc_start":
+                state_epochs = arc_start_times
+            elif initial_state_epoch_mode == "arc_mid":
+                state_epochs = arc_mid_times
+            else:
+                raise ValueError(
+                    f"Unknown initial_state_epoch_mode='{initial_state_epoch_mode}', expected 'arc_start' or 'arc_mid'."
+                )
+
+            initial_states_settings = parameters_setup.initial_states(propagator_settings, bodies, state_epochs)
             for settings in initial_states_settings:
                 parameter_settings.append(settings)
 
@@ -509,34 +519,110 @@ def simulate_observations_from_estimator(spacecraft_name, observation_times, est
     return observations_wrapper.simulate_observations(observation_simulation_settings, estimator.observation_simulators, bodies)
 
 
-def run_estimation(estimator, parameters_to_estimate, observations_set, nb_arcs, nb_iterations):
+def run_estimation(estimator, parameters_to_estimate, observations_set, nb_arcs, nb_iterations,
+                   apriori_covariance_position=5.0e2,
+                   apriori_covariance_velocity=1.0e-1,
+                   apriori_covariance_other_parameters=1.0e2,
+                   noise_level=5.0,
+                   enable_auto_retry=True):
 
-    truth_parameters = parameters_to_estimate.parameter_vector
-    nb_parameters = len(truth_parameters)
+    reference_parameters = parameters_to_estimate.parameter_vector.copy()
+    nb_parameters = len(reference_parameters)
 
-    inv_cov = np.zeros((nb_parameters, nb_parameters))
-    apriori_covariance_position = 1.0e3
-    apriori_covariance_velocity = 1.0#e-6
-    aPrioriCovarianceSRPCoef = 0.2
+    def run_single_attempt(position_sigma, velocity_sigma, other_sigma, current_noise_level):
+        inv_cov = np.zeros((nb_parameters, nb_parameters))
 
-    apriori_time_bias = 1.0e-7
+        for i in range(nb_arcs):
+            for j in range(3):
+                inv_cov[i * 6 + j, i * 6 + j] = 1.0 / (position_sigma * position_sigma)
+                inv_cov[i * 6 + 3 + j, i * 6 + 3 + j] = 1.0 / (velocity_sigma * velocity_sigma)
 
-    for i in range(nb_arcs):
-        for j in range(3):
-            inv_cov[i*6+j, i*6+j] = 1.0 / (apriori_covariance_position * apriori_covariance_position)
-            inv_cov[i*6+3+j, i*6+3+j] = 1.0 / (apriori_covariance_velocity * apriori_covariance_velocity)
+        # Regularization for non-state estimated parameters (biases, etc.) to reduce parameter coupling.
+        for i in range(6 * nb_arcs, nb_parameters):
+            inv_cov[i, i] = 1.0 / (other_sigma * other_sigma)
 
-    # Define observations weights
-    noise_level = 5.0
-    observations_set.set_constant_weight(noise_level ** -2, observations_processing.observation_parser(model_settings.one_way_instantaneous_doppler_type))
+        observations_set.set_constant_weight(
+            current_noise_level ** -2,
+            observations_processing.observation_parser(model_settings.one_way_instantaneous_doppler_type)
+        )
 
-    # Create input object for estimation_functions, adding observations and parameter set information
-    convergence_check = estimation_analysis.estimation_convergence_checker(nb_iterations)
-    estimation_input = estimation_analysis.EstimationInput(observations_set, inv_cov, convergence_check)
-    estimation_input.define_estimation_settings(reintegrate_variational_equations=True, save_design_matrix=True)
+        convergence_check = estimation_analysis.estimation_convergence_checker(nb_iterations)
+        estimation_input = estimation_analysis.EstimationInput(observations_set, inv_cov, convergence_check)
+        estimation_input.define_estimation_settings(reintegrate_variational_equations=True, save_design_matrix=True)
 
-    # Perform estimation_functions and return pod_output
-    return estimator.perform_estimation(estimation_input)
+        return estimator.perform_estimation(estimation_input)
+
+    if not enable_auto_retry:
+        parameters_to_estimate.parameter_vector = reference_parameters.copy()
+        return run_single_attempt(
+            apriori_covariance_position,
+            apriori_covariance_velocity,
+            apriori_covariance_other_parameters,
+            noise_level,
+        )
+
+    # Progressively stronger regularization/softer data weights for difficult real-data cases.
+    retry_schedule = [
+        (1.0, 1.0, 1.0, 1.0),
+        (0.6, 0.6, 0.6, 1.6),
+        (0.35, 0.35, 0.35, 2.5),
+        (0.2, 0.2, 0.2, 4.0),
+    ]
+
+    best_output = None
+    best_residual_metric = np.inf
+    last_error = None
+
+    for attempt_id, multipliers in enumerate(retry_schedule):
+        position_sigma = apriori_covariance_position * multipliers[0]
+        velocity_sigma = apriori_covariance_velocity * multipliers[1]
+        other_sigma = apriori_covariance_other_parameters * multipliers[2]
+        current_noise_level = noise_level * multipliers[3]
+
+        print(
+            f"Estimation attempt {attempt_id + 1}/{len(retry_schedule)}: "
+            f"sigma_pos={position_sigma:.3g} m, sigma_vel={velocity_sigma:.3g} m/s, "
+            f"sigma_other={other_sigma:.3g}, noise_sigma={current_noise_level:.3g} m/s"
+        )
+
+        parameters_to_estimate.parameter_vector = reference_parameters.copy()
+
+        try:
+            current_output = run_single_attempt(position_sigma, velocity_sigma, other_sigma, current_noise_level)
+
+            # Use final residual RMS as quality metric when available.
+            final_residuals = np.array(current_output.final_residuals)
+            if final_residuals.size == 0:
+                current_metric = np.inf
+            else:
+                current_metric = np.sqrt(np.nanmean(final_residuals ** 2))
+
+            if np.isfinite(current_metric) and current_metric < best_residual_metric:
+                best_output = current_output
+                best_residual_metric = current_metric
+
+            # Accept first finite, reasonable attempt immediately.
+            if np.isfinite(current_metric) and current_metric < 1.0e4:
+                print(f"Estimation succeeded at attempt {attempt_id + 1} with RMS residual {current_metric:.3f} m/s")
+                return current_output
+
+            print(
+                f"Attempt {attempt_id + 1} completed but residual RMS was high ({current_metric:.3f} m/s). "
+                f"Trying a more regularized setup."
+            )
+
+        except RuntimeError as error:
+            last_error = error
+            print(f"Attempt {attempt_id + 1} failed: {error}")
+
+    if best_output is not None:
+        print(f"Returning best available estimation result (RMS residual {best_residual_metric:.3f} m/s).")
+        return best_output
+
+    if last_error is not None:
+        raise last_error
+
+    raise RuntimeError("Estimation failed for all retry attempts.")
 
 
 # Function creating a dummy estimator (for 1st part of the tutorial when observations have to be simulated but no estimation_functions

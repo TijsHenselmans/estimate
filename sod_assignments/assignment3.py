@@ -155,7 +155,7 @@ initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
 # from its **global** initial state defined earlier over the entire propagation duration. From this **global** propagated orbit, we
 # then retrieve the spacecraft's states at the mid-epoch of each arc, to be later used as initial condition for the **arc_wise** propagation.
 global_orbit = propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "spacecraft", save_ephemeris=False)
-arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, arc_mid_times)
+arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, arc_start_times)
 
 # Create mutli-arc propagation settings
 multi_arc_propagation_settings = define_multi_arc_propagation_settings(
