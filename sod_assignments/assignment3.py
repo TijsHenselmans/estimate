@@ -48,8 +48,16 @@
 
 
 ### IMPORT STATEMENTS
+# Load standard modules
 import sys
+from pathlib import Path
 sys.path.append("../")
+
+
+ASSIGNMENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = ASSIGNMENT_DIR.parent
+
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Load required standard modules
 import numpy as np
