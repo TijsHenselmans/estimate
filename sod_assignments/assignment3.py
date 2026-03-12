@@ -76,8 +76,8 @@ from tudatpy.estimation.observations import observations_processing
 
 # Import doptrack-estimate functions
 from propagation_functions.environment import *
-from propagation_functions.propagation import *
-from estimation_functions.estimation import *
+from propagation_functions.propagation2 import *
+from estimation_functions.estimation2 import *
 from utility_functions.tle import *
 
 import cartopy.crs as ccrs
@@ -119,6 +119,11 @@ mid_epoch = (initial_epoch + final_epoch) / 2.0
 arc_duration = 1.0 * constants.JULIAN_DAY
 arc_start_times, arc_mid_times, arc_end_times = get_arc_times_definition(initial_epoch, final_epoch, arc_duration)
 nb_arcs = len(arc_mid_times)
+
+# Keep arc propagation/estimation epochs consistent to avoid unstable parameter updates.
+# Use "arc_mid" for the original assignment workflow, or "arc_start" for forward-only arcs.
+propagation_epoch_mode = "arc_mid"
+initial_state_epoch_mode = "arc_mid"
 
 
 # Define the properties of your simulated spacecraft, and the propagation environment
@@ -163,11 +168,12 @@ initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
 # from its **global** initial state defined earlier over the entire propagation duration. From this **global** propagated orbit, we
 # then retrieve the spacecraft's states at the mid-epoch of each arc, to be later used as initial condition for the **arc_wise** propagation.
 global_orbit = propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "spacecraft", save_ephemeris=False)
-arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, arc_start_times)
+state_parameter_epochs = arc_mid_times if initial_state_epoch_mode == "arc_mid" else arc_start_times
+arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, state_parameter_epochs)
 
 # Create mutli-arc propagation settings
 multi_arc_propagation_settings = define_multi_arc_propagation_settings(
-    arc_wise_initial_states, arc_start_times, arc_end_times, bodies, accelerations, "spacecraft")
+    arc_wise_initial_states, arc_start_times, arc_end_times, bodies, accelerations, "spacecraft", propagation_epoch_mode)
 
 
 ### Groundstation coverage
@@ -278,7 +284,8 @@ parameters_list = dict(
     }
 )
 parameters_to_estimate = define_parameters(parameters_list, bodies, multi_arc_propagation_settings, "spacecraft",
-                                           arc_start_times, arc_mid_times)
+                                           arc_start_times, arc_mid_times,
+                                           initial_state_epoch_mode=initial_state_epoch_mode)
 
 # Print estimated parameter names and corresponding indices
 parameters.print_parameter_names(parameters_to_estimate)
@@ -343,7 +350,7 @@ if use_next_tle_as_perturbation:
                                      "2 32789 097.4277 137.6209 0011263 214.0075 146.0432 15.07555919650162")
     next_delfi_ephemeris = environment.TleEphemeris("Earth", "J2000", next_delfi_tle, False)
     perturbed_arc_wise_initial_states = []
-    for time in arc_mid_times:
+    for time in state_parameter_epochs:
         perturbed_arc_wise_initial_states.append(next_delfi_ephemeris.cartesian_state(time))
 
     for i in range(nb_arcs):
