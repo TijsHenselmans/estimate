@@ -212,7 +212,6 @@ ax.gridlines(draw_labels=True)
 ax.set_xlim(-180.0, 180.0)
 ax.set_ylim(-90.0, 90.0)
 ax.legend()
-plt.show()
 
 
 # Define all uplink link ends for which one-way Doppler observables will be simulated
@@ -324,8 +323,6 @@ plt.grid()
 plt.xlabel("Time since initial epoch [hr]")
 plt.ylabel("Range-rate [m/s]")
 plt.legend()
-plt.show()
-
 
 ### PERTURBATION OF THE INITIAL STATE 
 
@@ -465,7 +462,6 @@ plt.xlabel('Parameter index [-]')
 plt.ylabel('True-to-formal errors ratio [-]')
 plt.grid()
 plt.legend()
-plt.show()
 
 # Plot observation residuals
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4 * 2, 4.8))
@@ -505,7 +501,6 @@ ax2.grid()
 ax2.legend()
 
 plt.tight_layout()
-plt.show()
 
 # Plot final residuals histogram
 plt.figure()
@@ -522,7 +517,6 @@ plt.title('Final residuals histogram')
 plt.tight_layout()
 plt.grid()
 plt.legend()
-plt.show()
 
 # Plot correlations matrix
 plt.figure()
@@ -531,7 +525,6 @@ plt.colorbar(label='Absolute correlation [-]')
 plt.title('Correlation matrix')
 plt.xlabel('Parameter index [-]')
 plt.ylabel('Parameter index [-]')
-# plt.show()
 
 # Compute correlations in RSW
 rotation_matrix_correlations = np.identity(nb_parameters)
