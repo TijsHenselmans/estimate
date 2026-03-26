@@ -48,16 +48,8 @@
 
 
 ### IMPORT STATEMENTS
-# Load standard modules
 import sys
-from pathlib import Path
 sys.path.append("../")
-
-
-ASSIGNMENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = ASSIGNMENT_DIR.parent
-
-sys.path.insert(0, str(PROJECT_ROOT))
 
 # Load required standard modules
 import numpy as np
@@ -76,8 +68,8 @@ from tudatpy.estimation.observations import observations_processing
 
 # Import doptrack-estimate functions
 from propagation_functions.environment import *
-from propagation_functions.propagation2 import *
-from estimation_functions.estimation2 import *
+from propagation_functions.propagation import *
+from estimation_functions.estimation import *
 from utility_functions.tle import *
 
 import cartopy.crs as ccrs
@@ -119,11 +111,6 @@ mid_epoch = (initial_epoch + final_epoch) / 2.0
 arc_duration = 1.0 * constants.JULIAN_DAY
 arc_start_times, arc_mid_times, arc_end_times = get_arc_times_definition(initial_epoch, final_epoch, arc_duration)
 nb_arcs = len(arc_mid_times)
-
-# Keep arc propagation/estimation epochs consistent to avoid unstable parameter updates.
-# Use "arc_mid" for the original assignment workflow, or "arc_start" for forward-only arcs.
-propagation_epoch_mode = "arc_mid"
-initial_state_epoch_mode = "arc_mid"
 
 
 # Define the properties of your simulated spacecraft, and the propagation environment
@@ -168,12 +155,11 @@ initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
 # from its **global** initial state defined earlier over the entire propagation duration. From this **global** propagated orbit, we
 # then retrieve the spacecraft's states at the mid-epoch of each arc, to be later used as initial condition for the **arc_wise** propagation.
 global_orbit = propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "spacecraft", save_ephemeris=False)
-state_parameter_epochs = arc_mid_times if initial_state_epoch_mode == "arc_mid" else arc_start_times
-arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, state_parameter_epochs)
+arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, arc_mid_times)
 
 # Create mutli-arc propagation settings
 multi_arc_propagation_settings = define_multi_arc_propagation_settings(
-    arc_wise_initial_states, arc_start_times, arc_end_times, bodies, accelerations, "spacecraft", propagation_epoch_mode)
+    arc_wise_initial_states, arc_start_times, arc_end_times, bodies, accelerations, "spacecraft")
 
 
 ### Groundstation coverage
@@ -190,8 +176,8 @@ nb_fake_stations = 2
 
 # Pre-defined coordinates of "fake" ground stations close to DopTrack (located in Den Haag and Rotterdam, respectively)
 # Comment/uncomment the following two lines depending on where you want your "fake" stations to be located
-#stations_lat = [52.0705, 51.9244]
-#stations_long = [4.3007, 4.4777]
+# stations_lat = [52.0705, 51.9244]
+# stations_long = [4.3007, 4.4777]
 
 # Pre-defined coordinates of "fake" ground stations far away from DopTrack (located in Australia and Braxil, respectively)
 # Comment/uncomment the following two lines depending on where you want your "fake" stations to be located
@@ -212,6 +198,7 @@ ax.gridlines(draw_labels=True)
 ax.set_xlim(-180.0, 180.0)
 ax.set_ylim(-90.0, 90.0)
 ax.legend()
+plt.show()
 
 
 # Define all uplink link ends for which one-way Doppler observables will be simulated
@@ -283,8 +270,7 @@ parameters_list = dict(
     }
 )
 parameters_to_estimate = define_parameters(parameters_list, bodies, multi_arc_propagation_settings, "spacecraft",
-                                           arc_start_times, arc_mid_times,
-                                           initial_state_epoch_mode=initial_state_epoch_mode)
+                                           arc_start_times, arc_mid_times)
 
 # Print estimated parameter names and corresponding indices
 parameters.print_parameter_names(parameters_to_estimate)
@@ -323,6 +309,8 @@ plt.grid()
 plt.xlabel("Time since initial epoch [hr]")
 plt.ylabel("Range-rate [m/s]")
 plt.legend()
+plt.show()
+
 
 ### PERTURBATION OF THE INITIAL STATE 
 
@@ -333,8 +321,8 @@ plt.legend()
 
 # Perturb the initial state estimate from the truth
 perturbed_parameters = truth_parameters.copy()
-use_next_tle_as_perturbation = False
-use_manual_perturbation = True 
+use_next_tle_as_perturbation = True
+use_manual_perturbation = False
 
 # Use next TLE update to derive realistic initial state perturbation
 if use_next_tle_as_perturbation:
@@ -347,7 +335,7 @@ if use_next_tle_as_perturbation:
                                      "2 32789 097.4277 137.6209 0011263 214.0075 146.0432 15.07555919650162")
     next_delfi_ephemeris = environment.TleEphemeris("Earth", "J2000", next_delfi_tle, False)
     perturbed_arc_wise_initial_states = []
-    for time in state_parameter_epochs:
+    for time in arc_mid_times:
         perturbed_arc_wise_initial_states.append(next_delfi_ephemeris.cartesian_state(time))
 
     for i in range(nb_arcs):
@@ -355,8 +343,8 @@ if use_next_tle_as_perturbation:
 
 # Perturb the initial state manually
 if use_manual_perturbation:
-    manual_position_perturbation = 2200.0  # in m
-    manual_velocity_perturbation = 2.2 # in m/s
+    manual_position_perturbation = 1000.0  # in m
+    manual_velocity_perturbation = 1.0  # in m/s
     manual_state_perturbation = np.concatenate((manual_position_perturbation * np.ones(3),
                                                manual_velocity_perturbation * np.ones(3)))
     for i in range(nb_arcs):
@@ -462,6 +450,7 @@ plt.xlabel('Parameter index [-]')
 plt.ylabel('True-to-formal errors ratio [-]')
 plt.grid()
 plt.legend()
+plt.show()
 
 # Plot observation residuals
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4 * 2, 4.8))
@@ -501,6 +490,7 @@ ax2.grid()
 ax2.legend()
 
 plt.tight_layout()
+plt.show()
 
 # Plot final residuals histogram
 plt.figure()
@@ -517,6 +507,7 @@ plt.title('Final residuals histogram')
 plt.tight_layout()
 plt.grid()
 plt.legend()
+plt.show()
 
 # Plot correlations matrix
 plt.figure()
@@ -525,13 +516,14 @@ plt.colorbar(label='Absolute correlation [-]')
 plt.title('Correlation matrix')
 plt.xlabel('Parameter index [-]')
 plt.ylabel('Parameter index [-]')
+# plt.show()
 
 # Compute correlations in RSW
 rotation_matrix_correlations = np.identity(nb_parameters)
 for i in range(nb_arcs):
     rotation_to_rsw = frame_conversion.inertial_to_rsw_rotation_matrix(arc_wise_initial_states[i])
     rotation_matrix_correlations[i*6+0:i*6+3,i*6+0:i*6+3] = rotation_to_rsw
-    rotation_matrix_correlations[i*6+3:i*6+6,i*6+3:i*6+6] = rotation_to_rsw
+    rotation_matrix_correlations[i*6+3:i*6+6,i*6+3:i*3+6] = rotation_to_rsw
 
 rsw_covariance = rotation_matrix_correlations @ covariance @ np.transpose( rotation_matrix_correlations )
 rsw_formal_errors = np.sqrt(np.diagonal(rsw_covariance))
