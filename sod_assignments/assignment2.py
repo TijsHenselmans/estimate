@@ -122,7 +122,7 @@ data = ['Delfi-C3_32789_202004011044.csv',
         
 # Specify which metadata and data files should be loaded (this will change throughout the assignment)
 # indices_files_to_load = [0, 1]
-indices_files_to_load = [0,1,2,3,4,5,6,7,8,9,10,11]
+indices_files_to_load = [0,1,4,6,11]
 
 
 ### SETTING UP AN INITIAL ORBIT DETERMINATION
@@ -199,8 +199,8 @@ accelerations = dict(
         'point_mass_gravity': True
     },
     Earth={
-        'point_mass_gravity': True,
-        'spherical_harmonic_gravity': False,
+        'point_mass_gravity': False,
+        'spherical_harmonic_gravity': True,
         'drag': True
     },
     Venus={
@@ -283,8 +283,8 @@ nb_iterations = 10
 nb_arcs = len(arc_start_times)
 
 # Estimation tuning knobs (useful when sweeping arc length, bias models and selected passes)
-apriori_position_sigma = 50  # [m]
-apriori_velocity_sigma = 0.1 # [m/s]
+apriori_position_sigma = 1000  # [m]
+apriori_velocity_sigma = 10 # [m/s]
 apriori_other_sigma = 5.0      # [m/s] for Doppler biases
 doppler_noise_sigma = 5.0        # [m/s]
 
@@ -348,6 +348,13 @@ ax.set_xlabel('Doppler residuals [m/s]')
 ax.set_ylabel('Nb occurrences []')
 plt.grid()
 
+
+# Print final RMS of residuals per pass at the end of residuals analysis
+import numpy as np
+print('\n--- Final RMS of residuals per pass (last iteration) ---')
+for i, pass_residuals in enumerate(residuals_per_pass):
+    rms = np.sqrt(np.mean(np.square(pass_residuals)))
+    print(f'Pass {i+1} RMS: {rms:.4f} m/s')
 
 
 ### ORBIT VALIDATION: some comparison suggestions
