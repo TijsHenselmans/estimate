@@ -186,7 +186,7 @@ multi_arc_propagation_settings = define_multi_arc_propagation_settings(
 define_doptrack_station(bodies)
 
 # Create "fake" ground station(s) and specify their location(s)
-nb_fake_stations = 9
+nb_fake_stations = 2
 
 # Pre-defined coordinates of "fake" ground stations close to DopTrack (located in Den Haag and Rotterdam, respectively)
 # Comment/uncomment the following two lines depending on where you want your "fake" stations to be located
@@ -195,12 +195,12 @@ nb_fake_stations = 9
 
 # Pre-defined coordinates of "fake" ground stations far away from DopTrack (located in Australia and Braxil, respectively)
 # Comment/uncomment the following two lines depending on where you want your "fake" stations to be located
-#stations_lat = [-25.0, -14.0]
-#stations_long = [134.0, -52.0]
+stations_lat = [-25.0, -14.0]
+stations_long = [134.0, -52.0]
 
 # 6 station case
-stations_lat = [67.0, 21.0, 7.0, -45.0, -45.0, -20.0, 90.0, -90.0, -70.0]
-stations_long = [-180.0, -104.0, 81.0, 168.0, -72.0, 20.0, 0.0, 0.0, 60.0]
+#stations_lat = [67.0, 21.0, 7.0, -45.0, -45.0, -20.0, 90.0, -90.0, -70.0]
+#stations_long = [-180.0, -104.0, 81.0, 168.0, -72.0, 20.0, 0.0, 0.0, 60.0]
 
 # 10 station case
 #stations_lat = []
@@ -282,11 +282,11 @@ parameters_list = dict(
         'type': 'global'  # can only be global
     },
     C20={
-        'estimate': True,
+        'estimate': False,
         'type': 'global'  # can only be global
     },
     C22={
-        'estimate': True,
+        'estimate': False,
         'type': 'global'  # can only be global
     }
 )
